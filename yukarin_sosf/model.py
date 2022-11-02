@@ -4,9 +4,9 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from accent_estimator.config import ModelConfig
-from accent_estimator.dataset import OutputData
-from accent_estimator.network.predictor import Predictor
+from yukarin_sosf.config import ModelConfig
+from yukarin_sosf.dataset import OutputData
+from yukarin_sosf.network.predictor import Predictor
 
 
 class ModelOutput(TypedDict):

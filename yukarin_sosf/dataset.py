@@ -9,7 +9,7 @@ from acoustic_feature_extractor.data.sampling_data import SamplingData
 from torch import Tensor, as_tensor
 from torch.utils.data import ConcatDataset, Dataset
 
-from accent_estimator.config import DatasetConfig
+from yukarin_sosf.config import DatasetConfig
 
 mora_phoneme_list = ["a", "i", "u", "e", "o", "I", "U", "E", "N", "cl", "pau"]
 voiced_phoneme_list = (

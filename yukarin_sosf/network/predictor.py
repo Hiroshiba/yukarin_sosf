@@ -1,7 +1,7 @@
 from typing import List
 
 import torch
-from accent_estimator.config import NetworkConfig
+from yukarin_sosf.config import NetworkConfig
 from espnet_pytorch_library.conformer.encoder import Encoder
 from espnet_pytorch_library.nets_utils import make_non_pad_mask
 from espnet_pytorch_library.tacotron2.decoder import Postnet

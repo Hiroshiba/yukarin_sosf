@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-from accent_estimator.utility import dataclass_utility
-from accent_estimator.utility.git_utility import get_branch_name, get_commit_id
+from yukarin_sosf.utility import dataclass_utility
+from yukarin_sosf.utility.git_utility import get_branch_name, get_commit_id
 
 
 @dataclass

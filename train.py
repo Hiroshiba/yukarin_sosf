@@ -8,11 +8,11 @@ import yaml
 from torch import Tensor
 from torch.utils.data import DataLoader
 
-from accent_estimator.config import Config
-from accent_estimator.dataset import create_dataset
-from accent_estimator.model import Model, ModelOutput
-from accent_estimator.network.predictor import create_predictor
-from accent_estimator.utility.pytorch_utility import (
+from yukarin_sosf.config import Config
+from yukarin_sosf.dataset import create_dataset
+from yukarin_sosf.model import Model, ModelOutput
+from yukarin_sosf.network.predictor import create_predictor
+from yukarin_sosf.utility.pytorch_utility import (
     collate_list,
     detach_cpu,
     init_weights,
@@ -20,7 +20,7 @@ from accent_estimator.utility.pytorch_utility import (
     make_scheduler,
     to_device,
 )
-from accent_estimator.utility.train_utility import Logger, SaveManager
+from yukarin_sosf.utility.train_utility import Logger, SaveManager
 
 
 def train(config_yaml_path: Path, output_dir: Path):
