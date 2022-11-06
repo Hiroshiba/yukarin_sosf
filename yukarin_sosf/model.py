@@ -11,18 +11,10 @@ from yukarin_sosf.network.predictor import Predictor
 
 class ModelOutput(TypedDict):
     loss: Tensor
-    loss_accent_start: Tensor
-    loss_accent_end: Tensor
-    loss_accent_phrase_start: Tensor
-    loss_accent_phrase_end: Tensor
-    precision_accent_start: Tensor
-    precision_accent_end: Tensor
-    precision_accent_phrase_start: Tensor
-    precision_accent_phrase_end: Tensor
-    recall_accent_start: Tensor
-    recall_accent_end: Tensor
-    recall_accent_phrase_start: Tensor
-    recall_accent_phrase_end: Tensor
+    loss_f0: Tensor
+    loss_voiced: Tensor
+    precision_voiced: Tensor
+    recall_voiced: Tensor
     data_num: int
 
 
@@ -42,60 +34,34 @@ class Model(nn.Module):
         self.model_config = model_config
         self.predictor = predictor
 
-    def forward(self, data) -> ModelOutput:
+    def forward(self, data: OutputData) -> ModelOutput:
         output_list: List[Tensor]
         _, output_list = self.predictor(
-            f0_list=data["mora_f0"],
+            discrete_f0_list=data["discrete_f0"],
+            phoneme_list=data["phoneme"],
         )
 
         output = torch.cat(output_list)
-        output_accent_start = output[:, 0]
-        output_accent_end = output[:, 1]
-        output_accent_phrase_start = output[:, 2]
-        output_accent_phrase_end = output[:, 3]
+        output_f0 = output[:, 0]
+        output_voiced = output[:, 1]
 
-        target_accent_start = torch.cat(data["accent_start"])
-        target_accent_end = torch.cat(data["accent_end"])
-        target_accent_phrase_start = torch.cat(data["accent_phrase_start"])
-        target_accent_phrase_end = torch.cat(data["accent_phrase_end"])
+        target_f0 = torch.cat(data["continuous_f0"]).squeeze(1)
+        target_voiced = torch.cat(data["voiced"]).squeeze(1)
 
-        loss_accent_start, precision_accent_start, recall_accent_start = calc(
-            output_accent_start, target_accent_start
-        )
-        loss_accent_end, precision_accent_end, recall_accent_end = calc(
-            output_accent_end, target_accent_end
-        )
-        (
-            loss_accent_phrase_start,
-            precision_accent_phrase_start,
-            recall_accent_phrase_start,
-        ) = calc(output_accent_phrase_start, target_accent_phrase_start)
-        (
-            loss_accent_phrase_end,
-            precision_accent_phrase_end,
-            recall_accent_phrase_end,
-        ) = calc(output_accent_phrase_end, target_accent_phrase_end)
+        mask = target_voiced
+        loss_f0 = F.l1_loss(output_f0[mask], target_f0[mask])
 
-        loss = (
-            loss_accent_start
-            + loss_accent_end
-            + loss_accent_phrase_start
-            + loss_accent_phrase_end
+        loss_voiced, precision_voiced, recall_voiced = calc(
+            output_voiced, target_voiced
         )
+
+        loss = loss_f0 + loss_voiced
 
         return ModelOutput(
             loss=loss,
-            loss_accent_start=loss_accent_start,
-            loss_accent_end=loss_accent_end,
-            loss_accent_phrase_start=loss_accent_phrase_start,
-            loss_accent_phrase_end=loss_accent_phrase_end,
-            precision_accent_start=precision_accent_start,
-            precision_accent_end=precision_accent_end,
-            precision_accent_phrase_start=precision_accent_phrase_start,
-            precision_accent_phrase_end=precision_accent_phrase_end,
-            recall_accent_start=recall_accent_start,
-            recall_accent_end=recall_accent_end,
-            recall_accent_phrase_start=recall_accent_phrase_start,
-            recall_accent_phrase_end=recall_accent_phrase_end,
+            loss_f0=loss_f0,
+            loss_voiced=loss_voiced,
+            precision_voiced=precision_voiced,
+            recall_voiced=recall_voiced,
             data_num=len(data),
         )

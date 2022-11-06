@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 
 from yukarin_sosf.config import Config
 from yukarin_sosf.dataset import create_dataset
+from yukarin_sosf.evaluator import Evaluator
+from yukarin_sosf.generator import Generator
 from yukarin_sosf.model import Model, ModelOutput
 from yukarin_sosf.network.predictor import create_predictor
 from yukarin_sosf.utility.pytorch_utility import (
@@ -40,6 +42,12 @@ def train(config_yaml_path: Path, output_dir: Path):
     model.to(device)
     model.train()
 
+    # evaluator
+    generator = Generator(
+        config=config, predictor=predictor, use_gpu=config.train.use_gpu
+    )
+    evaluator = Evaluator(generator=generator)
+
     # dataset
     datasets = create_dataset(config.dataset)
 
@@ -48,6 +56,9 @@ def train(config_yaml_path: Path, output_dir: Path):
         num_workers = config.train.num_processes
 
     def _create_loader(dataset, for_train: bool, for_eval: bool):
+        if dataset is None:
+            return None
+
         batch_size = (
             config.train.eval_batch_size if for_eval else config.train.batch_size
         )
@@ -66,10 +77,7 @@ def train(config_yaml_path: Path, output_dir: Path):
     train_loader = _create_loader(datasets["train"], for_train=True, for_eval=False)
     test_loader = _create_loader(datasets["test"], for_train=False, for_eval=False)
     eval_loader = _create_loader(datasets["test"], for_train=False, for_eval=True)
-
-    valid_loader = None
-    if datasets["valid"] is not None:
-        valid_loader = _create_loader(datasets["valid"], for_eval=True)
+    valid_loader = _create_loader(datasets["valid"], for_train=False, for_eval=True)
 
     # optimizer
     optimizer = make_optimizer(config_dict=config.train.optimizer, model=model)
@@ -165,9 +173,25 @@ def train(config_yaml_path: Path, output_dir: Path):
                     result = model(batch)
                 test_results.append(detach_cpu(result))
 
+            eval_results: List[ModelOutput] = []
+            for batch in eval_loader:
+                batch = to_device(batch, device, non_blocking=True)
+                with torch.inference_mode():
+                    result = evaluator(batch)
+                eval_results.append(detach_cpu(result))
+
+            valid_results: List[ModelOutput] = []
+            for batch in valid_loader:
+                batch = to_device(batch, device, non_blocking=True)
+                with torch.inference_mode():
+                    result = evaluator(batch)
+                valid_results.append(detach_cpu(result))
+
             summary = {
                 "train": reduce_result(train_results),
                 "test": reduce_result(test_results),
+                "eval": reduce_result(eval_results),
+                "valid": reduce_result(valid_results),
                 "iteration": iteration,
                 "lr": optimizer.param_groups[0]["lr"],
             }

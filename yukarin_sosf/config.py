@@ -6,21 +6,29 @@ from yukarin_sosf.utility.git_utility import get_branch_name, get_commit_id
 
 
 @dataclass
-class DatasetConfig:
+class DatasetFileConfig:
     f0_glob: str
     phoneme_list_glob: str
-    loudness_glob: str
-    accent_start_glob: str
-    accent_end_glob: str
-    accent_phrase_start_glob: str
-    accent_phrase_end_glob: str
+    silence_glob: str
+    volume_glob: str
+
+
+@dataclass
+class DatasetConfig:
+    train_file: DatasetFileConfig
+    valid_file: DatasetFileConfig
+    frame_rate: float
+    prepost_silence_length: int
+    f0_process_mode: str
+    max_sampling_length: Optional[int]
     test_num: int
-    eval_times_num: int = 1
     seed: int = 0
 
 
 @dataclass
 class NetworkConfig:
+    phoneme_size: int
+    phoneme_embedding_size: int
     hidden_size: int
     block_num: int
     post_layer_num: int
