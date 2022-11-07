@@ -70,7 +70,7 @@ def train(config_yaml_path: Path, output_dir: Path):
             collate_fn=collate_list,
             pin_memory=config.train.use_gpu,
             drop_last=for_train,
-            timeout=0 if num_workers == 0 else 60,
+            timeout=0 if num_workers == 0 else 30,
         )
 
     datasets = create_dataset(config.dataset)
@@ -173,45 +173,47 @@ def train(config_yaml_path: Path, output_dir: Path):
                     result = model(batch)
                 test_results.append(detach_cpu(result))
 
-            eval_results: List[ModelOutput] = []
-            for batch in eval_loader:
-                batch = to_device(batch, device, non_blocking=True)
-                with torch.inference_mode():
-                    result = evaluator(batch)
-                eval_results.append(detach_cpu(result))
-
-            valid_results: List[ModelOutput] = []
-            for batch in valid_loader:
-                batch = to_device(batch, device, non_blocking=True)
-                with torch.inference_mode():
-                    result = evaluator(batch)
-                valid_results.append(detach_cpu(result))
-
             summary = {
                 "train": reduce_result(train_results),
                 "test": reduce_result(test_results),
-                "eval": reduce_result(eval_results),
-                "valid": reduce_result(valid_results),
                 "iteration": iteration,
                 "lr": optimizer.param_groups[0]["lr"],
             }
+
+            if epoch % config.train.eval_epoch == 0:
+                eval_results: List[ModelOutput] = []
+                for batch in eval_loader:
+                    batch = to_device(batch, device, non_blocking=True)
+                    with torch.inference_mode():
+                        result = evaluator(batch)
+                    eval_results.append(detach_cpu(result))
+                summary["eval"] = reduce_result(eval_results)
+
+                valid_results: List[ModelOutput] = []
+                for batch in valid_loader:
+                    batch = to_device(batch, device, non_blocking=True)
+                    with torch.inference_mode():
+                        result = evaluator(batch)
+                    valid_results.append(detach_cpu(result))
+                summary["valid"] = reduce_result(valid_results)
+
+                if epoch % config.train.snapshot_epoch == 0:
+                    torch.save(
+                        {
+                            "model": model.state_dict(),
+                            "optimizer": optimizer.state_dict(),
+                            "logger": logger.state_dict(),
+                            "iteration": iteration,
+                            "epoch": epoch,
+                        },
+                        snapshot_path,
+                    )
+
+                    save_manager.save(
+                        value=summary["valid"]["value"], step=epoch, judge="min"
+                    )
+
             logger.log(summary=summary, step=epoch)
-
-            if epoch % config.train.snapshot_epoch == 0:
-                torch.save(
-                    {
-                        "model": model.state_dict(),
-                        "optimizer": optimizer.state_dict(),
-                        "logger": logger.state_dict(),
-                        "iteration": iteration,
-                        "epoch": epoch,
-                    },
-                    snapshot_path,
-                )
-
-                save_manager.save(
-                    value=summary["test"]["loss"], step=epoch, judge="min"
-                )
 
             model.train()
 

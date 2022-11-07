@@ -15,4 +15,4 @@ WORKDIR /app
 
 # install requirements
 COPY requirements.txt /app/
-RUN pip install -r <(cat requirements.txt | grep -v 'torch') # 5e86eb18f4df6ef5682c47128f3a843415ee4c2d
+RUN pip install -r <(cat requirements.txt | grep -x -v 'torch')

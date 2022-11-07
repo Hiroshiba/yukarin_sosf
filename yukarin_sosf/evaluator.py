@@ -16,6 +16,7 @@ class EvaluatorOutput(TypedDict):
     recall_voiced: Tensor
     precision_unvoiced: Tensor
     recall_unvoiced: Tensor
+    value: Tensor
     data_num: int
 
 
@@ -48,11 +49,14 @@ class Evaluator(nn.Module):
             output_voiced * -1, target_voiced != True
         )
 
+        value = diff_f0
+
         return EvaluatorOutput(
             diff_f0=diff_f0,
             precision_voiced=precision_voiced,
             recall_voiced=recall_voiced,
             precision_unvoiced=precision_unvoiced,
             recall_unvoiced=recall_unvoiced,
+            value=value,
             data_num=len(data),
         )
