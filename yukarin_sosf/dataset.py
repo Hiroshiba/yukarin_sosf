@@ -3,7 +3,7 @@ from enum import Enum
 from functools import partial
 from glob import glob
 from pathlib import Path
-from typing import List, Optional, Sequence, TypedDict, Union
+from typing import List, Optional, Sequence, Union
 
 import numpy
 import torch
@@ -11,6 +11,7 @@ from acoustic_feature_extractor.data.phoneme import OjtPhoneme
 from acoustic_feature_extractor.data.sampling_data import SamplingData
 from torch import Tensor
 from torch.utils.data import Dataset
+from typing_extensions import TypedDict
 
 from yukarin_sosf.config import DatasetConfig, DatasetFileConfig
 

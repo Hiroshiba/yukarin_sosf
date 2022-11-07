@@ -1,9 +1,10 @@
 from pathlib import Path
-from typing import Any, List, Optional, TypedDict, Union
+from typing import Any, List, Optional, Union
 
 import numpy
 import torch
 from torch import Tensor, nn
+from typing_extensions import TypedDict
 
 from yukarin_sosf.config import Config
 from yukarin_sosf.network.predictor import Predictor, create_predictor

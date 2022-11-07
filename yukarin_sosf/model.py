@@ -1,8 +1,9 @@
-from typing import List, TypedDict
+from typing import List
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
+from typing_extensions import TypedDict
 
 from yukarin_sosf.config import ModelConfig
 from yukarin_sosf.dataset import OutputData
