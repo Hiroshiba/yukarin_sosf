@@ -71,6 +71,7 @@ def train(config_yaml_path: Path, output_dir: Path):
             pin_memory=config.train.use_gpu,
             drop_last=for_train,
             timeout=0 if num_workers == 0 else 30,
+            persistent_workers=num_workers > 0,
         )
 
     datasets = create_dataset(config.dataset)
