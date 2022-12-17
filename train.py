@@ -1,18 +1,17 @@
 import argparse
-import multiprocessing
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import List
 
 import torch
 import yaml
-from torch import Tensor
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
 from yukarin_sosf.config import Config
 from yukarin_sosf.dataset import create_dataset
 from yukarin_sosf.evaluator import Evaluator
 from yukarin_sosf.generator import Generator
-from yukarin_sosf.model import Model, ModelOutput
+from yukarin_sosf.model import Model, ModelOutput, reduce_result
 from yukarin_sosf.network.predictor import create_predictor
 from yukarin_sosf.utility.pytorch_utility import (
     collate_list,
@@ -51,10 +50,6 @@ def train(config_yaml_path: Path, output_dir: Path):
     # dataset
     datasets = create_dataset(config.dataset)
 
-    num_workers = multiprocessing.cpu_count()
-    if config.train.num_processes is not None:
-        num_workers = config.train.num_processes
-
     def _create_loader(dataset, for_train: bool, for_eval: bool):
         if dataset is None:
             return None
@@ -66,12 +61,12 @@ def train(config_yaml_path: Path, output_dir: Path):
             dataset=dataset,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=num_workers,
+            num_workers=config.train.num_processes,
             collate_fn=collate_list,
             pin_memory=config.train.use_gpu,
             drop_last=for_train,
-            timeout=0 if num_workers == 0 else 30,
-            persistent_workers=num_workers > 0,
+            timeout=0 if config.train.num_processes == 0 else 30,
+            persistent_workers=config.train.num_processes > 0,
         )
 
     datasets = create_dataset(config.dataset)
@@ -82,6 +77,7 @@ def train(config_yaml_path: Path, output_dir: Path):
 
     # optimizer
     optimizer = make_optimizer(config_dict=config.train.optimizer, model=model)
+    scaler = GradScaler(enabled=config.train.use_amp)
 
     # logger
     logger = Logger(
@@ -101,6 +97,7 @@ def train(config_yaml_path: Path, output_dir: Path):
 
         model.load_state_dict(snapshot["model"])
         optimizer.load_state_dict(snapshot["optimizer"])
+        scaler.load_state_dict(snapshot["scaler"])
         logger.load_state_dict(snapshot["logger"])
 
         iteration = snapshot["iteration"]
@@ -142,79 +139,69 @@ def train(config_yaml_path: Path, output_dir: Path):
         for batch in train_loader:
             iteration += 1
 
-            batch = to_device(batch, device, non_blocking=True)
-            result: ModelOutput = model(batch)
+            with autocast(enabled=config.train.use_amp):
+                batch = to_device(batch, device, non_blocking=True)
+                result: ModelOutput = model(batch)
 
             optimizer.zero_grad()
-            result["loss"].backward()
-            optimizer.step()
+            scaler.scale(result["loss"]).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             scheduler.step()
 
             train_results.append(detach_cpu(result))
 
-        def reduce_result(results: List[ModelOutput]):
-            result: Dict[str, Any] = {}
-            sum_data_num = sum([r["data_num"] for r in results])
-            for key in set(results[0].keys()) - {"data_num"}:
-                values = [r[key] * r["data_num"] for r in results]
-                if isinstance(values[0], Tensor):
-                    result[key] = torch.stack(values).sum() / sum_data_num
-                else:
-                    result[key] = sum(values) / sum_data_num
-            return result
-
         if epoch % config.train.log_epoch == 0:
             model.eval()
 
-            test_results: List[ModelOutput] = []
-            for batch in test_loader:
-                batch = to_device(batch, device, non_blocking=True)
-                with torch.inference_mode():
+            with torch.inference_mode():
+                test_results: List[ModelOutput] = []
+                for batch in test_loader:
+                    batch = to_device(batch, device, non_blocking=True)
                     result = model(batch)
-                test_results.append(detach_cpu(result))
+                    test_results.append(detach_cpu(result))
 
-            summary = {
-                "train": reduce_result(train_results),
-                "test": reduce_result(test_results),
-                "iteration": iteration,
-                "lr": optimizer.param_groups[0]["lr"],
-            }
+                summary = {
+                    "train": reduce_result(train_results),
+                    "test": reduce_result(test_results),
+                    "iteration": iteration,
+                    "lr": optimizer.param_groups[0]["lr"],
+                }
 
-            if epoch % config.train.eval_epoch == 0:
-                eval_results: List[ModelOutput] = []
-                for batch in eval_loader:
-                    batch = to_device(batch, device, non_blocking=True)
-                    with torch.inference_mode():
+                if epoch % config.train.eval_epoch == 0:
+                    eval_results: List[ModelOutput] = []
+                    for batch in eval_loader:
+                        batch = to_device(batch, device, non_blocking=True)
                         result = evaluator(batch)
-                    eval_results.append(detach_cpu(result))
-                summary["eval"] = reduce_result(eval_results)
+                        eval_results.append(detach_cpu(result))
+                    summary["eval"] = reduce_result(eval_results)
 
-                valid_results: List[ModelOutput] = []
-                for batch in valid_loader:
-                    batch = to_device(batch, device, non_blocking=True)
-                    with torch.inference_mode():
+                    valid_results: List[ModelOutput] = []
+                    for batch in valid_loader:
+                        batch = to_device(batch, device, non_blocking=True)
                         result = evaluator(batch)
-                    valid_results.append(detach_cpu(result))
-                summary["valid"] = reduce_result(valid_results)
+                        valid_results.append(detach_cpu(result))
+                    summary["valid"] = reduce_result(valid_results)
 
-                if epoch % config.train.snapshot_epoch == 0:
-                    torch.save(
-                        {
-                            "model": model.state_dict(),
-                            "optimizer": optimizer.state_dict(),
-                            "logger": logger.state_dict(),
-                            "iteration": iteration,
-                            "epoch": epoch,
-                        },
-                        snapshot_path,
-                    )
+                    if epoch % config.train.snapshot_epoch == 0:
+                        torch.save(
+                            {
+                                "model": model.state_dict(),
+                                "optimizer": optimizer.state_dict(),
+                                "scaler": scaler.state_dict(),
+                                "logger": logger.state_dict(),
+                                "iteration": iteration,
+                                "epoch": epoch,
+                            },
+                            snapshot_path,
+                        )
 
-                    save_manager.save(
-                        value=summary["valid"]["value"], step=epoch, judge="min"
-                    )
+                        save_manager.save(
+                            value=summary["valid"]["value"], step=epoch, judge="min"
+                        )
 
-            logger.log(summary=summary, step=epoch)
+                logger.log(summary=summary, step=epoch)
 
             model.train()
 

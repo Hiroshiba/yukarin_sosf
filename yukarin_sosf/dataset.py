@@ -47,11 +47,9 @@ def f0_mean(
 
 def make_phoneme_array(phoneme_list: List[OjtPhoneme], frame_rate: float, length: int):
     to_index = lambda x: int(x * frame_rate)
-    phoneme = numpy.empty(to_index(phoneme_list[-1].end + 1), dtype=numpy.int32)
+    phoneme = numpy.zeros(length, dtype=numpy.int32)
     for p in phoneme_list:
         phoneme[to_index(p.start) : to_index(p.end)] = p.phoneme_id
-    if len(phoneme) < length:
-        phoneme = numpy.pad(phoneme, (0, length - len(phoneme)), "edge")
     return phoneme[:length]
 
 

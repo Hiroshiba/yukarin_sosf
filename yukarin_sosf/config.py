@@ -51,9 +51,9 @@ class TrainConfig:
     optimizer: Dict[str, Any]
     scheduler: Dict[str, Any]
     weight_initializer: Optional[str] = None
-    num_processes: Optional[int] = None
+    num_processes: int = 4
     use_gpu: bool = True
-    # use_amp: bool = False
+    use_amp: bool = True
 
 
 @dataclass

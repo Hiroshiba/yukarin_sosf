@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, Dict, List
 
 import torch
 import torch.nn.functional as F
@@ -17,6 +17,18 @@ class ModelOutput(TypedDict):
     precision_voiced: Tensor
     recall_voiced: Tensor
     data_num: int
+
+
+def reduce_result(results: List[ModelOutput]):
+    result: Dict[str, Any] = {}
+    sum_data_num = sum([r["data_num"] for r in results])
+    for key in set(results[0].keys()) - {"data_num"}:
+        values = [r[key] * r["data_num"] for r in results]
+        if isinstance(values[0], Tensor):
+            result[key] = torch.stack(values).sum() / sum_data_num
+        else:
+            result[key] = sum(values) / sum_data_num
+    return result
 
 
 def calc(output: Tensor, target: Tensor):
