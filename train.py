@@ -198,7 +198,9 @@ def train(config_yaml_path: Path, output_dir: Path):
                         )
 
                         save_manager.save(
-                            value=summary["valid"]["value"], step=epoch, judge="min"
+                            value=summary["valid"]["value"],
+                            step=epoch,
+                            judge=evaluator.judge,
                         )
 
                 logger.log(summary=summary, step=epoch)

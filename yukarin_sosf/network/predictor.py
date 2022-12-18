@@ -6,12 +6,15 @@ from espnet_pytorch_library.nets_utils import make_non_pad_mask
 from espnet_pytorch_library.tacotron2.decoder import Postnet
 from torch import Tensor, nn
 from torch.nn.utils.rnn import pad_sequence
+
 from yukarin_sosf.config import NetworkConfig
 
 
 class Predictor(nn.Module):
     def __init__(
         self,
+        speaker_size: int,
+        speaker_embedding_size: int,
         phoneme_size: int,
         phoneme_embedding_size: int,
         hidden_size: int,
@@ -20,18 +23,17 @@ class Predictor(nn.Module):
     ):
         super().__init__()
 
-        self.with_phoneme = phoneme_size > 0 and phoneme_embedding_size > 0
+        self.speaker_embedder = nn.Embedding(
+            num_embeddings=speaker_size,
+            embedding_dim=speaker_embedding_size,
+        )
 
-        input_size = 1
-        if self.with_phoneme:
-            self.phoneme_embedder = nn.Embedding(
-                num_embeddings=phoneme_size,
-                embedding_dim=phoneme_embedding_size,
-            )
-            input_size += phoneme_embedding_size
-        else:
-            self.phoneme_embedder = None
+        self.phoneme_embedder = nn.Embedding(
+            num_embeddings=phoneme_size,
+            embedding_dim=phoneme_embedding_size,
+        )
 
+        input_size = 1 + phoneme_embedding_size + speaker_embedding_size
         self.pre = torch.nn.Linear(input_size, hidden_size)
 
         self.encoder = Encoder(
@@ -77,7 +79,8 @@ class Predictor(nn.Module):
     def forward(
         self,
         discrete_f0_list: List[Tensor],  # [(L, )]
-        phoneme_list: Optional[List[Tensor]],  # [(L, )]
+        phoneme_list: List[Tensor],  # [(L, )]
+        speaker_id: Tensor,  # (B, )
     ):
         """
         B: batch size
@@ -88,11 +91,16 @@ class Predictor(nn.Module):
         length = torch.tensor(length_list, device=discrete_f0_list[0].device)
         h = pad_sequence(discrete_f0_list, batch_first=True)  # (B, L, ?)
 
-        if self.with_phoneme and phoneme_list is not None:
-            phoneme = pad_sequence(phoneme_list, batch_first=True)  # (B, L)
-            phoneme = self.phoneme_embedder(phoneme)  # (B, L, ?)
-            h = torch.cat((h, phoneme), dim=2)  # (B, L, ?)
+        phoneme = pad_sequence(phoneme_list, batch_first=True)  # (B, L)
+        phoneme = self.phoneme_embedder(phoneme)  # (B, L, ?)
 
+        speaker_id = self.speaker_embedder(speaker_id)
+        speaker_id = speaker_id.unsqueeze(dim=1)  # (B, 1, ?)
+        speaker_feature = speaker_id.expand(
+            speaker_id.shape[0], h.shape[1], speaker_id.shape[2]
+        )  # (B, L, ?)
+
+        h = torch.cat((h, phoneme, speaker_feature), dim=2)  # (B, L, ?)
         h = self.pre(h)
 
         mask = self._mask(length)
@@ -112,14 +120,21 @@ class Predictor(nn.Module):
     def inference(
         self,
         discrete_f0_list: List[Tensor],  # [(L, )]
-        phoneme_list: Optional[List[Tensor]],  # [(L, )]
+        phoneme_list: List[Tensor],  # [(L, )]
+        speaker_id: Tensor,  # (B, )
     ):
-        _, h = self(discrete_f0_list=discrete_f0_list, phoneme_list=phoneme_list)
+        _, h = self(
+            discrete_f0_list=discrete_f0_list,
+            phoneme_list=phoneme_list,
+            speaker_id=speaker_id,
+        )
         return h
 
 
 def create_predictor(config: NetworkConfig):
     return Predictor(
+        speaker_size=config.speaker_size,
+        speaker_embedding_size=config.speaker_embedding_size,
         phoneme_size=config.phoneme_size,
         phoneme_embedding_size=config.phoneme_embedding_size,
         hidden_size=config.hidden_size,

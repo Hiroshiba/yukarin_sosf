@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from yukarin_sosf.utility import dataclass_utility
@@ -11,6 +12,7 @@ class DatasetFileConfig:
     phoneme_list_glob: str
     silence_glob: str
     volume_glob: str
+    speaker_dict_path: Path
 
 
 @dataclass
@@ -27,6 +29,8 @@ class DatasetConfig:
 
 @dataclass
 class NetworkConfig:
+    speaker_size: int
+    speaker_embedding_size: int
     phoneme_size: int
     phoneme_embedding_size: int
     hidden_size: int

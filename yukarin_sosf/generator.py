@@ -45,17 +45,18 @@ class Generator(nn.Module):
     def forward(
         self,
         discrete_f0_list: List[Union[numpy.ndarray, Tensor]],
-        phoneme_list: Optional[List[Union[numpy.ndarray, Tensor]]],
+        phoneme_list: List[Union[numpy.ndarray, Tensor]],
+        speaker_id: Union[numpy.ndarray, Tensor],
     ):
         discrete_f0_list = [to_tensor(f0).to(self.device) for f0 in discrete_f0_list]
-        if phoneme_list is not None:
-            phoneme_list = [
-                to_tensor(phoneme).to(self.device) for phoneme in phoneme_list
-            ]
+        phoneme_list = [to_tensor(phoneme).to(self.device) for phoneme in phoneme_list]
+        speaker_id = to_tensor(speaker_id).to(self.device)
 
         with torch.inference_mode():
             output_list = self.predictor.inference(
-                discrete_f0_list=discrete_f0_list, phoneme_list=phoneme_list
+                discrete_f0_list=discrete_f0_list,
+                phoneme_list=phoneme_list,
+                speaker_id=speaker_id,
             )
 
         return [

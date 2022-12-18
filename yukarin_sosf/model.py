@@ -52,6 +52,7 @@ class Model(nn.Module):
         _, output_list = self.predictor(
             discrete_f0_list=data["discrete_f0"],
             phoneme_list=data["phoneme"],
+            speaker_id=torch.stack(data["speaker_id"]),
         )
 
         output = torch.cat(output_list)

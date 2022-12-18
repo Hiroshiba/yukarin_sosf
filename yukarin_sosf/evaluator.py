@@ -3,7 +3,7 @@ from typing import List
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from typing_extensions import TypedDict
+from typing_extensions import Literal, TypedDict
 
 from yukarin_sosf.dataset import OutputData
 from yukarin_sosf.generator import Generator, GeneratorOutput
@@ -21,6 +21,8 @@ class EvaluatorOutput(TypedDict):
 
 
 class Evaluator(nn.Module):
+    judge: Literal["min", "max"] = "min"
+
     def __init__(self, generator: Generator):
         super().__init__()
         self.generator = generator
@@ -31,6 +33,7 @@ class Evaluator(nn.Module):
         output_list: List[GeneratorOutput] = self.generator(
             discrete_f0_list=data["discrete_f0"],
             phoneme_list=data["phoneme"],
+            speaker_id=torch.stack(data["speaker_id"]),
         )
 
         target_f0 = torch.cat(data["continuous_f0"]).squeeze(1)

@@ -1,9 +1,10 @@
+import json
 from dataclasses import dataclass
 from enum import Enum
 from functools import partial
 from glob import glob
 from pathlib import Path
-from typing import List, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Union
 
 import numpy
 import torch
@@ -77,6 +78,7 @@ class InputData:
     phoneme_list: List[OjtPhoneme]
     silence: SamplingData
     volume: SamplingData
+    speaker_id: int
 
 
 @dataclass
@@ -85,6 +87,7 @@ class LazyInputData:
     phoneme_list_path: Path
     silence_path: Path
     volume_path: Path
+    speaker_id: int
 
     def generate(self):
         return InputData(
@@ -92,6 +95,7 @@ class LazyInputData:
             phoneme_list=OjtPhoneme.load_julius_list(self.phoneme_list_path),
             silence=SamplingData.load(self.silence_path),
             volume=SamplingData.load(self.volume_path),
+            speaker_id=self.speaker_id,
         )
 
 
@@ -101,6 +105,7 @@ class OutputData(TypedDict):
     silence: Tensor
     phoneme: Tensor
     voiced: Tensor
+    speaker_id: Tensor
 
 
 def preprocess(
@@ -186,6 +191,7 @@ def preprocess(
         silence=torch.from_numpy(silence),
         phoneme=torch.from_numpy(phoneme),
         voiced=torch.from_numpy(voiced),
+        speaker_id=torch.tensor(d.speaker_id),
     )
     return output_data
 
@@ -219,37 +225,40 @@ class FeatureTargetDataset(Dataset):
 
 
 def get_datas(config: DatasetFileConfig):
-    f0_paths = [Path(p) for p in sorted(glob(config.f0_glob))]
-    assert len(f0_paths) > 0, f"f0 files not ehough: {config.f0_glob}"
+    f0_paths = {Path(p).stem: Path(p) for p in glob(config.f0_glob)}
+    fn_list = sorted(f0_paths.keys())
+    assert len(fn_list) > 0
 
-    phoneme_list_paths = [Path(p) for p in sorted(glob(config.phoneme_list_glob))]
-    assert len(phoneme_list_paths) == len(
-        f0_paths
-    ), f"phoneme list files not ehough: {config.phoneme_list_glob}"
+    phoneme_list_paths = {
+        Path(p).stem: Path(p) for p in sorted(glob(config.phoneme_list_glob))
+    }
+    assert set(fn_list) == set(phoneme_list_paths.keys())
 
-    silence_paths = [Path(p) for p in sorted(glob(config.silence_glob))]
-    assert len(silence_paths) == len(
-        f0_paths
-    ), f"silence files not ehough: {config.silence_glob}"
+    silence_paths = {Path(p).stem: Path(p) for p in sorted(glob(config.silence_glob))}
+    assert set(fn_list) == set(silence_paths.keys())
 
-    volume_paths = [Path(p) for p in sorted(glob(config.volume_glob))]
-    assert len(volume_paths) == len(
-        f0_paths
-    ), f"volume files not ehough: {config.volume_glob}"
+    volume_paths = {Path(p).stem: Path(p) for p in sorted(glob(config.volume_glob))}
+    assert set(fn_list) == set(volume_paths.keys())
+
+    fn_each_speaker: Dict[str, List[str]] = json.loads(
+        config.speaker_dict_path.read_text()
+    )
+    speaker_ids = {
+        fn: speaker_id
+        for speaker_id, (_, fns) in enumerate(fn_each_speaker.items())
+        for fn in fns
+    }
+    assert set(fn_list).issubset(set(speaker_ids.keys()))
 
     datas = [
         LazyInputData(
-            f0_path=f0_path,
-            phoneme_list_path=phoneme_list_path,
-            silence_path=silence_path,
-            volume_path=volume_path,
+            f0_path=f0_paths[fn],
+            phoneme_list_path=phoneme_list_paths[fn],
+            silence_path=silence_paths[fn],
+            volume_path=volume_paths[fn],
+            speaker_id=speaker_ids[fn],
         )
-        for (f0_path, phoneme_list_path, silence_path, volume_path,) in zip(
-            f0_paths,
-            phoneme_list_paths,
-            silence_paths,
-            volume_paths,
-        )
+        for fn in fn_list
     ]
     return datas
 
