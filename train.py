@@ -38,6 +38,12 @@ def train(config_yaml_path: Path, output_dir: Path):
         init_weights(model, name=config.train.weight_initializer)
 
     device = "cuda" if config.train.use_gpu else "cpu"
+    if config.train.pretrained_predictor_path is not None:
+        state_dict = torch.load(
+            config.train.pretrained_predictor_path, map_location=device
+        )
+        state_dict["speaker_embedder.weight"] = predictor.speaker_embedder.weight
+        predictor.load_state_dict(state_dict)
     model.to(device)
     model.train()
 
