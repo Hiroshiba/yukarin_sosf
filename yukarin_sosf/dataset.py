@@ -8,13 +8,13 @@ from typing import Dict, List, Optional, Sequence, Union
 
 import numpy
 import torch
-from acoustic_feature_extractor.data.phoneme import OjtPhoneme
-from acoustic_feature_extractor.data.sampling_data import SamplingData
 from torch import Tensor
 from torch.utils.data import Dataset
 from typing_extensions import TypedDict
 
 from yukarin_sosf.config import DatasetConfig, DatasetFileConfig
+from yukarin_sosf.data.phoneme import OjtPhoneme
+from yukarin_sosf.data.sampling_data import SamplingData
 
 mora_phoneme_list = ["a", "i", "u", "e", "o", "I", "U", "E", "N", "cl", "pau"]
 voiced_phoneme_list = (
